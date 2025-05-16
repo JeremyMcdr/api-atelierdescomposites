@@ -1,6 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 
+// Constante pour l'angle maximum autorisé pour le pliage (en degrés)
+const MAX_BEND_ANGLE = 65;
+
 /**
  * Calcule l'angle et la distance entre deux points
  * @param {object} point1 - Premier point {x, y}
@@ -26,6 +29,34 @@ function calculateMidpoint(point1, point2) {
     x: (point1.x + point2.x) / 2,
     y: (point1.y + point2.y) / 2
   };
+}
+
+/**
+ * Divise un angle de rotation en plusieurs étapes ne dépassant pas l'angle maximum autorisé
+ * @param {number} rotationAngle - Angle de rotation total requis (en degrés)
+ * @returns {Array<number>} - Liste des angles de rotation successifs
+ */
+function divideRotation(rotationAngle) {
+  const result = [];
+  const absAngle = Math.abs(rotationAngle);
+  const sign = Math.sign(rotationAngle);
+  
+  // Si l'angle est déjà dans les limites autorisées, le retourner tel quel
+  if (absAngle <= MAX_BEND_ANGLE) {
+    return [rotationAngle];
+  }
+  
+  // Calculer le nombre d'étapes nécessaires
+  const steps = Math.ceil(absAngle / MAX_BEND_ANGLE);
+  // Répartir l'angle équitablement entre les étapes
+  const anglePerStep = absAngle / steps;
+  
+  // Générer les étapes de rotation
+  for (let i = 0; i < steps; i++) {
+    result.push(parseFloat((sign * anglePerStep).toFixed(2)));
+  }
+  
+  return result;
 }
 
 /**
@@ -337,7 +368,11 @@ function processLine(line, actions, currentPosition, currentAngle) {
     // Tourner vers le point de départ
     const rotationAngle = vectorToStart.angle - currentAngle;
     if (Math.abs(rotationAngle) > 0.001) {
-      actions.push({ action: 'PLIER', valeur: parseFloat(rotationAngle.toFixed(2)) });
+      // Diviser la rotation en plusieurs étapes si nécessaire
+      const rotationSteps = divideRotation(parseFloat(rotationAngle.toFixed(2)));
+      for (const stepAngle of rotationSteps) {
+        actions.push({ action: 'PLIER', valeur: stepAngle });
+      }
       currentAngle = vectorToStart.angle;
     }
     
@@ -352,7 +387,11 @@ function processLine(line, actions, currentPosition, currentAngle) {
   // Tourner vers la direction de la ligne si nécessaire
   const rotationAngle = vectorLine.angle - currentAngle;
   if (Math.abs(rotationAngle) > 0.001) {
-    actions.push({ action: 'PLIER', valeur: parseFloat(rotationAngle.toFixed(2)) });
+    // Diviser la rotation en plusieurs étapes si nécessaire
+    const rotationSteps = divideRotation(parseFloat(rotationAngle.toFixed(2)));
+    for (const stepAngle of rotationSteps) {
+      actions.push({ action: 'PLIER', valeur: stepAngle });
+    }
     currentAngle = vectorLine.angle;
   }
   
@@ -381,7 +420,11 @@ function processPolyline(polyline, actions, currentPosition, currentAngle, shoul
   if (vectorToStart.distance > 0.001) {
     const rotationAngle = vectorToStart.angle - currentAngle;
     if (Math.abs(rotationAngle) > 0.001) {
-      actions.push({ action: 'PLIER', valeur: parseFloat(rotationAngle.toFixed(2)) });
+      // Diviser la rotation en plusieurs étapes si nécessaire
+      const rotationSteps = divideRotation(parseFloat(rotationAngle.toFixed(2)));
+      for (const stepAngle of rotationSteps) {
+        actions.push({ action: 'PLIER', valeur: stepAngle });
+      }
       currentAngle = vectorToStart.angle;
     }
     
@@ -399,7 +442,11 @@ function processPolyline(polyline, actions, currentPosition, currentAngle, shoul
     // Tourner vers la direction du segment si nécessaire
     const rotationAngle = vectorSegment.angle - currentAngle;
     if (Math.abs(rotationAngle) > 0.001) {
-      actions.push({ action: 'PLIER', valeur: parseFloat(rotationAngle.toFixed(2)) });
+      // Diviser la rotation en plusieurs étapes si nécessaire
+      const rotationSteps = divideRotation(parseFloat(rotationAngle.toFixed(2)));
+      for (const stepAngle of rotationSteps) {
+        actions.push({ action: 'PLIER', valeur: stepAngle });
+      }
       currentAngle = vectorSegment.angle;
     }
     
@@ -417,7 +464,11 @@ function processPolyline(polyline, actions, currentPosition, currentAngle, shoul
     // Tourner vers le premier point si nécessaire
     const rotationAngle = vectorClose.angle - currentAngle;
     if (Math.abs(rotationAngle) > 0.001) {
-      actions.push({ action: 'PLIER', valeur: parseFloat(rotationAngle.toFixed(2)) });
+      // Diviser la rotation en plusieurs étapes si nécessaire
+      const rotationSteps = divideRotation(parseFloat(rotationAngle.toFixed(2)));
+      for (const stepAngle of rotationSteps) {
+        actions.push({ action: 'PLIER', valeur: stepAngle });
+      }
       currentAngle = vectorClose.angle;
     }
     
@@ -445,7 +496,11 @@ function processCircle(circle, actions, currentPosition, currentAngle) {
   if (vectorToCenter.distance > 0.001) {
     const rotationAngle = vectorToCenter.angle - currentAngle;
     if (Math.abs(rotationAngle) > 0.001) {
-      actions.push({ action: 'PLIER', valeur: parseFloat(rotationAngle.toFixed(2)) });
+      // Diviser la rotation en plusieurs étapes si nécessaire
+      const rotationSteps = divideRotation(parseFloat(rotationAngle.toFixed(2)));
+      for (const stepAngle of rotationSteps) {
+        actions.push({ action: 'PLIER', valeur: stepAngle });
+      }
       currentAngle = vectorToCenter.angle;
     }
     
@@ -463,7 +518,11 @@ function processCircle(circle, actions, currentPosition, currentAngle) {
   const vectorToStart = calculateVector(currentPosition, startPoint);
   const rotationToStart = vectorToStart.angle - currentAngle;
   if (Math.abs(rotationToStart) > 0.001) {
-    actions.push({ action: 'PLIER', valeur: parseFloat(rotationToStart.toFixed(2)) });
+    // Diviser la rotation en plusieurs étapes si nécessaire
+    const rotationSteps = divideRotation(parseFloat(rotationToStart.toFixed(2)));
+    for (const stepAngle of rotationSteps) {
+      actions.push({ action: 'PLIER', valeur: stepAngle });
+    }
     currentAngle = vectorToStart.angle;
   }
   
@@ -481,8 +540,11 @@ function processCircle(circle, actions, currentPosition, currentAngle) {
     const vectorToNextPoint = calculateVector(currentPosition, nextPoint);
     const rotationAngle = vectorToNextPoint.angle - currentAngle;
     
-    // Plier pour suivre la courbe du cercle
-    actions.push({ action: 'PLIER', valeur: parseFloat(rotationAngle.toFixed(2)) });
+    // Diviser la rotation en plusieurs étapes si nécessaire
+    const rotationSteps = divideRotation(parseFloat(rotationAngle.toFixed(2)));
+    for (const stepAngle of rotationSteps) {
+      actions.push({ action: 'PLIER', valeur: stepAngle });
+    }
     currentAngle = vectorToNextPoint.angle;
     
     // Avancer le long du segment courant
@@ -492,5 +554,6 @@ function processCircle(circle, actions, currentPosition, currentAngle) {
 }
 
 module.exports = {
-  parseDxfToActions
+  parseDxfToActions,
+  MAX_BEND_ANGLE // Exporter la constante pour référence externe
 }; 

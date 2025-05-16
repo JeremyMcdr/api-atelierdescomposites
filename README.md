@@ -2,6 +2,20 @@
 
 Cette API permet de manipuler des fichiers SVG, de les convertir en format DXF et de les transformer en séquences d'actions pour contrôler des moteurs produisant des formes 2D.
 
+## Caractéristiques
+
+- Conversion SVG vers DXF
+- Conversion DXF vers séquences d'actions (AVANCER, PLIER, COUPER)
+- Envoi des séquences d'actions à une API externe pour contrôle de machine
+- Opérations CRUD complètes pour les fichiers SVG
+- Documentation Swagger interactive
+- Vérification de l'état de l'API cible au démarrage
+- Arrêt d'urgence pour la machine
+
+## Contraintes techniques
+
+- **Limitation des angles de pliage**: La machine a une contrainte physique limitant les angles de pliage à **65 degrés maximum**. L'API divise automatiquement les angles plus importants en plusieurs rotations successives plus petites pour respecter cette contrainte.
+
 ## Installation
 
 ```bash
@@ -140,4 +154,13 @@ Trois types d'actions sont disponibles :
 
 ## Documentation Swagger
 
-Une documentation complète de l'API est disponible au format Swagger dans le fichier `swagger.yaml`. Vous pouvez la visualiser avec un outil comme Swagger UI. 
+Une documentation complète de l'API est disponible au format Swagger dans le fichier `swagger.yaml`. Vous pouvez la visualiser avec un outil comme Swagger UI.
+
+## API Documentation
+
+Une documentation interactive Swagger est disponible à l'adresse `/api-docs` une fois le serveur démarré.
+
+## Routes d'urgence
+
+- `POST /api/emergency/stop`: Déclenche un arrêt d'urgence sur l'API cible
+- `GET /api/emergency/status`: Vérifie le statut de connexion avec l'API cible 
