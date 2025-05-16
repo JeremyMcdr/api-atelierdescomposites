@@ -42,7 +42,21 @@ async function convertSVGToActions(svgFilePath, dxfOutputDir, options = {}) {
 
     // 4. Convertir le DXF en séquence d'actions
     console.log(`Conversion du DXF en séquence d'actions: ${dxfFilePath}`);
-    const actions = await dxfParserService.parseDxfToActions(dxfFilePath, { closePolygons });
+    const result = await dxfParserService.parseDxfToActions(dxfFilePath, { closePolygons });
+    
+    // Vérifier si le résultat contient des erreurs d'angle
+    if (!result.success) {
+      console.warn(`Erreur lors de la génération des actions: ${result.error}`);
+      return {
+        success: false,
+        error: result.error,
+        invalidAngles: result.invalidAngles,
+        maxAllowedAngle: dxfParserService.MAX_BEND_ANGLE
+      };
+    }
+    
+    // Récupérer les actions valides
+    const actions = result.actions;
     console.log(`Séquence d'actions générée avec ${actions.length} actions`);
 
     // 5. Envoyer à l'API externe si demandé
@@ -60,6 +74,7 @@ async function convertSVGToActions(svgFilePath, dxfOutputDir, options = {}) {
     }
 
     return {
+      success: true,
       actions,
       apiResponse,
       apiSent: Boolean(apiResponse)

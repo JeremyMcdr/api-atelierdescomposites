@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 // Constante pour l'angle maximum autorisé pour le pliage (en degrés)
-const MAX_BEND_ANGLE = 65;
+const MAX_BEND_ANGLE = 115;
 
 /**
  * Calcule l'angle et la distance entre deux points
@@ -32,31 +32,12 @@ function calculateMidpoint(point1, point2) {
 }
 
 /**
- * Divise un angle de rotation en plusieurs étapes ne dépassant pas l'angle maximum autorisé
- * @param {number} rotationAngle - Angle de rotation total requis (en degrés)
- * @returns {Array<number>} - Liste des angles de rotation successifs
+ * Vérifie si un angle est dans les limites autorisées
+ * @param {number} angle - Angle à vérifier (en degrés)
+ * @returns {boolean} - True si l'angle est valide, false sinon
  */
-function divideRotation(rotationAngle) {
-  const result = [];
-  const absAngle = Math.abs(rotationAngle);
-  const sign = Math.sign(rotationAngle);
-  
-  // Si l'angle est déjà dans les limites autorisées, le retourner tel quel
-  if (absAngle <= MAX_BEND_ANGLE) {
-    return [rotationAngle];
-  }
-  
-  // Calculer le nombre d'étapes nécessaires
-  const steps = Math.ceil(absAngle / MAX_BEND_ANGLE);
-  // Répartir l'angle équitablement entre les étapes
-  const anglePerStep = absAngle / steps;
-  
-  // Générer les étapes de rotation
-  for (let i = 0; i < steps; i++) {
-    result.push(parseFloat((sign * anglePerStep).toFixed(2)));
-  }
-  
-  return result;
+function isValidAngle(angle) {
+  return Math.abs(angle) <= MAX_BEND_ANGLE;
 }
 
 /**
@@ -65,7 +46,7 @@ function divideRotation(rotationAngle) {
  * @param {object} options - Options de conversion
  * @param {boolean} options.closePolygons - Si true, ferme automatiquement les polygones (défaut: true)
  * @param {boolean} options.startAtLongestSegment - Si true, commence au milieu du segment le plus long (défaut: true)
- * @returns {Promise<Array>} - Une promesse résolvant avec un tableau d'actions
+ * @returns {Promise<object>} - Une promesse résolvant avec un objet contenant les actions ou une erreur
  */
 async function parseDxfToActions(dxfFilePath, options = {}) {
   // Options par défaut
@@ -85,10 +66,12 @@ async function parseDxfToActions(dxfFilePath, options = {}) {
     const entities = extractEntitiesFromDXF(dxfContent);
     
     // Convertir les entités en actions
-    return convertEntitiesToActions(entities, { 
+    const result = convertEntitiesToActions(entities, { 
       shouldClosePolygons,
       startAtLongestSegment
     });
+    
+    return result;
   } catch (error) {
     console.error("Erreur lors du parsing du DXF:", error);
     throw error;
@@ -291,11 +274,12 @@ function findLongestSegment(entities) {
  * @param {object} options - Options de conversion
  * @param {boolean} options.shouldClosePolygons - Si true, ferme automatiquement les polygones
  * @param {boolean} options.startAtLongestSegment - Si true, commence au milieu du segment le plus long
- * @returns {Array} - Liste des actions
+ * @returns {Object} - Objet contenant soit les actions, soit une erreur
  */
 function convertEntitiesToActions(entities, options = {}) {
   const { shouldClosePolygons = true, startAtLongestSegment = true } = options;
   const actions = [];
+  const invalidAngles = [];
   
   // Position et angle de départ
   let currentPosition = { x: 0, y: 0 };
@@ -322,34 +306,61 @@ function convertEntitiesToActions(entities, options = {}) {
 
   // Traiter toutes les entités
   for (const entity of entities) {
+    let entityErrors = [];
+    
     switch (entity.type) {
       case 'LINE':
-        processLine(entity, actions, currentPosition, currentAngle);
-        // Mettre à jour la position actuelle
-        currentPosition = { ...entity.end };
+        entityErrors = processLine(entity, actions, currentPosition, currentAngle);
+        if (entityErrors.length > 0) {
+          invalidAngles.push(...entityErrors);
+        } else {
+          // Mettre à jour la position actuelle
+          currentPosition = { ...entity.end };
+        }
         break;
       case 'LWPOLYLINE':
       case 'POLYLINE':
-        processPolyline(entity, actions, currentPosition, currentAngle, shouldClosePolygons);
-        // Mettre à jour la position actuelle si des vertices existent
-        if (entity.vertices.length > 0) {
+        entityErrors = processPolyline(entity, actions, currentPosition, currentAngle, shouldClosePolygons);
+        if (entityErrors.length > 0) {
+          invalidAngles.push(...entityErrors);
+        } else if (entity.vertices.length > 0) {
+          // Mettre à jour la position actuelle si des vertices existent
           const lastVertex = entity.vertices[entity.vertices.length - 1];
           currentPosition = { x: lastVertex.x, y: lastVertex.y };
         }
         break;
       case 'CIRCLE':
         // La gestion d'un cercle est plus complexe - nous allons l'approximer avec des segments
-        processCircle(entity, actions, currentPosition, currentAngle);
-        // La position finale dépend de comment on approxime le cercle - ici on revient au centre
-        currentPosition = { ...entity.center };
+        entityErrors = processCircle(entity, actions, currentPosition, currentAngle);
+        if (entityErrors.length > 0) {
+          invalidAngles.push(...entityErrors);
+        } else {
+          // La position finale dépend de comment on approxime le cercle - ici on revient au centre
+          currentPosition = { ...entity.center };
+        }
         break;
     }
+  }
+
+  // Si des angles invalides ont été détectés, retourner une erreur
+  if (invalidAngles.length > 0) {
+    console.error(`Erreur: Le fichier contient ${invalidAngles.length} angles invalides dépassant ±${MAX_BEND_ANGLE} degrés.`);
+    
+    return {
+      success: false,
+      error: `Le fichier contient des angles de pliage trop importants. La machine est limitée à ±${MAX_BEND_ANGLE} degrés.`,
+      invalidAngles: invalidAngles
+    };
   }
 
   // Ajouter une action COUPER à la fin
   actions.push({ action: 'COUPER' });
 
-  return actions;
+  // Retourner les actions
+  return {
+    success: true,
+    actions: actions
+  };
 }
 
 /**
@@ -358,8 +369,11 @@ function convertEntitiesToActions(entities, options = {}) {
  * @param {Array} actions - La liste des actions à mettre à jour
  * @param {Object} currentPosition - La position actuelle {x, y}
  * @param {Number} currentAngle - L'angle actuel de la machine en degrés
+ * @returns {Array} - Liste des erreurs d'angle invalides
  */
 function processLine(line, actions, currentPosition, currentAngle) {
+  const invalidAngles = [];
+  
   // Calculer le vecteur (angle et distance) entre la position actuelle et le début de la ligne
   const vectorToStart = calculateVector(currentPosition, line.start);
   
@@ -368,17 +382,29 @@ function processLine(line, actions, currentPosition, currentAngle) {
     // Tourner vers le point de départ
     const rotationAngle = vectorToStart.angle - currentAngle;
     if (Math.abs(rotationAngle) > 0.001) {
-      // Diviser la rotation en plusieurs étapes si nécessaire
-      const rotationSteps = divideRotation(parseFloat(rotationAngle.toFixed(2)));
-      for (const stepAngle of rotationSteps) {
-        actions.push({ action: 'PLIER', valeur: stepAngle });
+      // Vérifier que l'angle est valide
+      if (!isValidAngle(rotationAngle)) {
+        invalidAngles.push({
+          angle: parseFloat(rotationAngle.toFixed(2)),
+          position: { ...currentPosition },
+          description: "Rotation vers le début de la ligne"
+        });
+      } else {
+        actions.push({ action: 'PLIER', valeur: parseFloat(rotationAngle.toFixed(2)) });
+        currentAngle = vectorToStart.angle;
       }
-      currentAngle = vectorToStart.angle;
     }
     
     // Avancer jusqu'au point de départ
-    actions.push({ action: 'AVANCER', valeur: parseFloat(vectorToStart.distance.toFixed(3)) });
-    currentPosition = { ...line.start };
+    if (invalidAngles.length === 0) { // Seulement si pas d'erreur d'angle
+      actions.push({ action: 'AVANCER', valeur: parseFloat(vectorToStart.distance.toFixed(3)) });
+      currentPosition = { ...line.start };
+    }
+  }
+  
+  // Si des erreurs ont déjà été trouvées, ne pas continuer
+  if (invalidAngles.length > 0) {
+    return invalidAngles;
   }
   
   // Calculer le vecteur entre le début et la fin de la ligne
@@ -387,16 +413,25 @@ function processLine(line, actions, currentPosition, currentAngle) {
   // Tourner vers la direction de la ligne si nécessaire
   const rotationAngle = vectorLine.angle - currentAngle;
   if (Math.abs(rotationAngle) > 0.001) {
-    // Diviser la rotation en plusieurs étapes si nécessaire
-    const rotationSteps = divideRotation(parseFloat(rotationAngle.toFixed(2)));
-    for (const stepAngle of rotationSteps) {
-      actions.push({ action: 'PLIER', valeur: stepAngle });
+    // Vérifier que l'angle est valide
+    if (!isValidAngle(rotationAngle)) {
+      invalidAngles.push({
+        angle: parseFloat(rotationAngle.toFixed(2)),
+        position: { ...currentPosition },
+        description: "Rotation le long de la ligne"
+      });
+    } else {
+      actions.push({ action: 'PLIER', valeur: parseFloat(rotationAngle.toFixed(2)) });
+      currentAngle = vectorLine.angle;
     }
-    currentAngle = vectorLine.angle;
   }
   
-  // Avancer le long de la ligne
-  actions.push({ action: 'AVANCER', valeur: parseFloat(vectorLine.distance.toFixed(3)) });
+  // Avancer le long de la ligne si pas d'erreur d'angle
+  if (invalidAngles.length === 0) {
+    actions.push({ action: 'AVANCER', valeur: parseFloat(vectorLine.distance.toFixed(3)) });
+  }
+  
+  return invalidAngles;
 }
 
 /**
@@ -406,10 +441,13 @@ function processLine(line, actions, currentPosition, currentAngle) {
  * @param {Object} currentPosition - La position actuelle {x, y}
  * @param {Number} currentAngle - L'angle actuel de la machine en degrés
  * @param {Boolean} shouldClosePolygons - Si true, ferme automatiquement les polygones fermés
+ * @returns {Array} - Liste des erreurs d'angle invalides
  */
 function processPolyline(polyline, actions, currentPosition, currentAngle, shouldClosePolygons = true) {
+  const invalidAngles = [];
+  
   if (!polyline.vertices || polyline.vertices.length === 0) {
-    return;
+    return invalidAngles;
   }
   
   // Se positionner au premier point de la polyligne
@@ -420,17 +458,29 @@ function processPolyline(polyline, actions, currentPosition, currentAngle, shoul
   if (vectorToStart.distance > 0.001) {
     const rotationAngle = vectorToStart.angle - currentAngle;
     if (Math.abs(rotationAngle) > 0.001) {
-      // Diviser la rotation en plusieurs étapes si nécessaire
-      const rotationSteps = divideRotation(parseFloat(rotationAngle.toFixed(2)));
-      for (const stepAngle of rotationSteps) {
-        actions.push({ action: 'PLIER', valeur: stepAngle });
+      // Vérifier que l'angle est valide
+      if (!isValidAngle(rotationAngle)) {
+        invalidAngles.push({
+          angle: parseFloat(rotationAngle.toFixed(2)),
+          position: { ...currentPosition },
+          description: "Rotation vers le premier point de la polyligne"
+        });
+      } else {
+        actions.push({ action: 'PLIER', valeur: parseFloat(rotationAngle.toFixed(2)) });
+        currentAngle = vectorToStart.angle;
       }
-      currentAngle = vectorToStart.angle;
     }
     
-    // Avancer jusqu'au premier point
-    actions.push({ action: 'AVANCER', valeur: parseFloat(vectorToStart.distance.toFixed(3)) });
-    currentPosition = { ...firstVertex };
+    // Avancer jusqu'au premier point si pas d'erreur d'angle
+    if (invalidAngles.length === 0) {
+      actions.push({ action: 'AVANCER', valeur: parseFloat(vectorToStart.distance.toFixed(3)) });
+      currentPosition = { ...firstVertex };
+    }
+  }
+  
+  // Si des erreurs ont déjà été trouvées, ne pas continuer
+  if (invalidAngles.length > 0) {
+    return invalidAngles;
   }
   
   // Parcourir les segments de la polyligne
@@ -442,21 +492,29 @@ function processPolyline(polyline, actions, currentPosition, currentAngle, shoul
     // Tourner vers la direction du segment si nécessaire
     const rotationAngle = vectorSegment.angle - currentAngle;
     if (Math.abs(rotationAngle) > 0.001) {
-      // Diviser la rotation en plusieurs étapes si nécessaire
-      const rotationSteps = divideRotation(parseFloat(rotationAngle.toFixed(2)));
-      for (const stepAngle of rotationSteps) {
-        actions.push({ action: 'PLIER', valeur: stepAngle });
+      // Vérifier que l'angle est valide
+      if (!isValidAngle(rotationAngle)) {
+        invalidAngles.push({
+          angle: parseFloat(rotationAngle.toFixed(2)),
+          position: { ...currentPosition },
+          description: `Rotation vers le segment ${i} de la polyligne`
+        });
+        break; // Arrêter le traitement si angle invalide
+      } else {
+        actions.push({ action: 'PLIER', valeur: parseFloat(rotationAngle.toFixed(2)) });
+        currentAngle = vectorSegment.angle;
       }
-      currentAngle = vectorSegment.angle;
     }
     
-    // Avancer le long du segment
-    actions.push({ action: 'AVANCER', valeur: parseFloat(vectorSegment.distance.toFixed(3)) });
-    currentPosition = { ...endPoint };
+    // Avancer le long du segment si pas d'erreur d'angle
+    if (invalidAngles.length === 0) {
+      actions.push({ action: 'AVANCER', valeur: parseFloat(vectorSegment.distance.toFixed(3)) });
+      currentPosition = { ...endPoint };
+    }
   }
   
   // Si l'option est activée et que la polyligne est fermée, fermer le chemin en revenant au premier point
-  if (shouldClosePolygons && polyline.closed && polyline.vertices.length > 1) {
+  if (invalidAngles.length === 0 && shouldClosePolygons && polyline.closed && polyline.vertices.length > 1) {
     const lastVertex = polyline.vertices[polyline.vertices.length - 1];
     const firstVertex = polyline.vertices[0];
     const vectorClose = calculateVector(lastVertex, firstVertex);
@@ -464,18 +522,27 @@ function processPolyline(polyline, actions, currentPosition, currentAngle, shoul
     // Tourner vers le premier point si nécessaire
     const rotationAngle = vectorClose.angle - currentAngle;
     if (Math.abs(rotationAngle) > 0.001) {
-      // Diviser la rotation en plusieurs étapes si nécessaire
-      const rotationSteps = divideRotation(parseFloat(rotationAngle.toFixed(2)));
-      for (const stepAngle of rotationSteps) {
-        actions.push({ action: 'PLIER', valeur: stepAngle });
+      // Vérifier que l'angle est valide
+      if (!isValidAngle(rotationAngle)) {
+        invalidAngles.push({
+          angle: parseFloat(rotationAngle.toFixed(2)),
+          position: { ...currentPosition },
+          description: "Rotation pour fermer la polyligne"
+        });
+      } else {
+        actions.push({ action: 'PLIER', valeur: parseFloat(rotationAngle.toFixed(2)) });
+        currentAngle = vectorClose.angle;
       }
-      currentAngle = vectorClose.angle;
     }
     
-    // Avancer jusqu'au premier point
-    actions.push({ action: 'AVANCER', valeur: parseFloat(vectorClose.distance.toFixed(3)) });
-    currentPosition = { ...firstVertex };
+    // Avancer jusqu'au premier point si pas d'erreur d'angle
+    if (invalidAngles.length === 0) {
+      actions.push({ action: 'AVANCER', valeur: parseFloat(vectorClose.distance.toFixed(3)) });
+      currentPosition = { ...firstVertex };
+    }
   }
+  
+  return invalidAngles;
 }
 
 /**
@@ -484,8 +551,10 @@ function processPolyline(polyline, actions, currentPosition, currentAngle, shoul
  * @param {Array} actions - La liste des actions à mettre à jour
  * @param {Object} currentPosition - La position actuelle {x, y}
  * @param {Number} currentAngle - L'angle actuel de la machine en degrés
+ * @returns {Array} - Liste des erreurs d'angle invalides
  */
 function processCircle(circle, actions, currentPosition, currentAngle) {
+  const invalidAngles = [];
   const numSegments = 24; // Nombre de segments pour approximer le cercle
   const angleStep = 360 / numSegments;
   
@@ -496,17 +565,29 @@ function processCircle(circle, actions, currentPosition, currentAngle) {
   if (vectorToCenter.distance > 0.001) {
     const rotationAngle = vectorToCenter.angle - currentAngle;
     if (Math.abs(rotationAngle) > 0.001) {
-      // Diviser la rotation en plusieurs étapes si nécessaire
-      const rotationSteps = divideRotation(parseFloat(rotationAngle.toFixed(2)));
-      for (const stepAngle of rotationSteps) {
-        actions.push({ action: 'PLIER', valeur: stepAngle });
+      // Vérifier que l'angle est valide
+      if (!isValidAngle(rotationAngle)) {
+        invalidAngles.push({
+          angle: parseFloat(rotationAngle.toFixed(2)),
+          position: { ...currentPosition },
+          description: "Rotation vers le centre du cercle"
+        });
+      } else {
+        actions.push({ action: 'PLIER', valeur: parseFloat(rotationAngle.toFixed(2)) });
+        currentAngle = vectorToCenter.angle;
       }
-      currentAngle = vectorToCenter.angle;
     }
     
-    // Avancer jusqu'au centre du cercle
-    actions.push({ action: 'AVANCER', valeur: parseFloat(vectorToCenter.distance.toFixed(3)) });
-    currentPosition = { ...circle.center };
+    // Avancer jusqu'au centre du cercle si pas d'erreur d'angle
+    if (invalidAngles.length === 0) {
+      actions.push({ action: 'AVANCER', valeur: parseFloat(vectorToCenter.distance.toFixed(3)) });
+      currentPosition = { ...circle.center };
+    }
+  }
+  
+  // Si des erreurs ont déjà été trouvées, ne pas continuer
+  if (invalidAngles.length > 0) {
+    return invalidAngles;
   }
   
   // Aller au point de départ du cercle (à droite du centre)
@@ -518,12 +599,18 @@ function processCircle(circle, actions, currentPosition, currentAngle) {
   const vectorToStart = calculateVector(currentPosition, startPoint);
   const rotationToStart = vectorToStart.angle - currentAngle;
   if (Math.abs(rotationToStart) > 0.001) {
-    // Diviser la rotation en plusieurs étapes si nécessaire
-    const rotationSteps = divideRotation(parseFloat(rotationToStart.toFixed(2)));
-    for (const stepAngle of rotationSteps) {
-      actions.push({ action: 'PLIER', valeur: stepAngle });
+    // Vérifier que l'angle est valide
+    if (!isValidAngle(rotationToStart)) {
+      invalidAngles.push({
+        angle: parseFloat(rotationToStart.toFixed(2)),
+        position: { ...currentPosition },
+        description: "Rotation vers le point de départ du cercle"
+      });
+      return invalidAngles;
+    } else {
+      actions.push({ action: 'PLIER', valeur: parseFloat(rotationToStart.toFixed(2)) });
+      currentAngle = vectorToStart.angle;
     }
-    currentAngle = vectorToStart.angle;
   }
   
   actions.push({ action: 'AVANCER', valeur: parseFloat(circle.radius.toFixed(3)) });
@@ -540,17 +627,25 @@ function processCircle(circle, actions, currentPosition, currentAngle) {
     const vectorToNextPoint = calculateVector(currentPosition, nextPoint);
     const rotationAngle = vectorToNextPoint.angle - currentAngle;
     
-    // Diviser la rotation en plusieurs étapes si nécessaire
-    const rotationSteps = divideRotation(parseFloat(rotationAngle.toFixed(2)));
-    for (const stepAngle of rotationSteps) {
-      actions.push({ action: 'PLIER', valeur: stepAngle });
+    // Vérifier que l'angle est valide
+    if (!isValidAngle(rotationAngle)) {
+      invalidAngles.push({
+        angle: parseFloat(rotationAngle.toFixed(2)),
+        position: { ...currentPosition },
+        description: `Rotation lors du tracé du cercle (segment ${i})`
+      });
+      break; // Arrêter le traitement si angle invalide
+    } else {
+      actions.push({ action: 'PLIER', valeur: parseFloat(rotationAngle.toFixed(2)) });
+      currentAngle = vectorToNextPoint.angle;
     }
-    currentAngle = vectorToNextPoint.angle;
     
     // Avancer le long du segment courant
     actions.push({ action: 'AVANCER', valeur: parseFloat(vectorToNextPoint.distance.toFixed(3)) });
     currentPosition = { ...nextPoint };
   }
+  
+  return invalidAngles;
 }
 
 module.exports = {

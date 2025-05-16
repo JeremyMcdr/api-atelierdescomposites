@@ -2,6 +2,7 @@ const path = require('path');
 const fs = require('fs');
 const combinedService = require('../services/combinedService');
 const appConfig = require('../config/appConfig');
+const dxfParserService = require('../services/dxfParserService');
 
 const uploadsDir = path.join(__dirname, '../uploads');
 const dxfDir = path.join(__dirname, '../generated_dxf');
@@ -25,7 +26,10 @@ if (!fs.existsSync(uploadsDir)) {
  */
 exports.uploadAndConvert = async (req, res) => {
   if (!req.file) {
-    return res.status(400).json({ message: 'Aucun fichier SVG fourni.' });
+    return res.status(400).json({
+      success: false,
+      message: 'Aucun fichier SVG fourni.'
+    });
   }
 
   // Le fichier est déjà sauvegardé par multer dans le dossier uploads
@@ -44,6 +48,20 @@ exports.uploadAndConvert = async (req, res) => {
   try {
     // Générer directement la séquence d'actions à partir du fichier SVG uploadé
     const result = await combinedService.convertSVGToActions(svgFilePath, dxfDir, options);
+    
+    // Vérifier si le résultat contient des erreurs d'angle
+    if (!result.success) {
+      console.warn(`Erreur de génération pour ${originalFilename}: ${result.error}`);
+      return res.status(422).json({
+        success: false,
+        message: result.error,
+        invalidAngles: result.invalidAngles,
+        maxAllowedAngle: dxfParserService.MAX_BEND_ANGLE,
+        originalSvg: req.file.filename,
+        originalFilename: originalFilename
+      });
+    }
+    
     const { actions, apiResponse, apiSent } = result;
     
     // Sauvegarder les actions dans un fichier JSON
@@ -56,6 +74,7 @@ exports.uploadAndConvert = async (req, res) => {
       
       // Construire la réponse
       const response = {
+        success: true,
         message: `Séquence d'actions générée directement depuis l'upload SVG et sauvegardée`,
         originalSvg: req.file.filename,
         originalFilename: originalFilename,
@@ -77,6 +96,7 @@ exports.uploadAndConvert = async (req, res) => {
     } catch (writeError) {
       console.error("Erreur lors de la sauvegarde de la séquence d'actions:", writeError);
       res.status(500).json({
+        success: false,
         message: "Erreur lors de la sauvegarde de la séquence d'actions. La génération a réussi mais la sauvegarde a échoué.",
         originalSvg: req.file.filename,
         originalFilename: originalFilename,
@@ -89,6 +109,7 @@ exports.uploadAndConvert = async (req, res) => {
   } catch (error) {
     console.error("Erreur lors de la conversion SVG vers séquence d'actions:", error);
     res.status(500).json({ 
+      success: false,
       message: "Erreur lors de la conversion SVG vers séquence d'actions.", 
       errorDetails: error.message 
     });

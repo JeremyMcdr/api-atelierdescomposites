@@ -19,13 +19,34 @@ exports.convertDxfToSequence = async (req, res) => {
   const filename = req.params.filename;
   const dxfFilePath = path.join(dxfDir, filename);
   
+  // Options de conversion (depuis query params)
+  const closePolygons = req.query.closePolygons !== 'false'; // Par défaut à true
+  const startAtLongestSegment = req.query.startAtLongestSegment !== 'false'; // Par défaut à true
+  
   if (!fs.existsSync(dxfFilePath)) {
     return res.status(404).json({ message: 'Fichier DXF non trouvé.' });
   }
   
   try {
     // Générer la séquence d'actions à partir du fichier DXF
-    const actions = await dxfParserService.parseDxfToActions(dxfFilePath);
+    const result = await dxfParserService.parseDxfToActions(dxfFilePath, {
+      closePolygons,
+      startAtLongestSegment
+    });
+    
+    // Vérifier si le résultat contient des erreurs d'angle
+    if (!result.success) {
+      console.warn(`Erreur de génération pour ${filename}: ${result.error}`);
+      return res.status(422).json({
+        success: false,
+        message: result.error,
+        invalidAngles: result.invalidAngles,
+        maxAllowedAngle: dxfParserService.MAX_BEND_ANGLE
+      });
+    }
+    
+    // Récupérer les actions du résultat
+    const actions = result.actions;
     
     // Sauvegarder les actions dans un fichier JSON
     const sequenceFilename = `${path.parse(filename).name}_${Date.now()}.json`;
@@ -36,6 +57,7 @@ exports.convertDxfToSequence = async (req, res) => {
       console.log(`Séquence d'actions sauvegardée dans : ${sequenceFilePath}`);
       
       res.status(200).json({
+        success: true,
         message: `Séquence d'actions générée et sauvegardée pour ${filename}`,
         originalDxf: filename,
         sequenceFile: sequenceFilename,
@@ -45,6 +67,7 @@ exports.convertDxfToSequence = async (req, res) => {
     } catch (writeError) {
       console.error("Erreur lors de la sauvegarde de la séquence d'actions:", writeError);
       res.status(500).json({
+        success: false,
         message: "Erreur lors de la sauvegarde de la séquence d'actions. La génération a réussi mais la sauvegarde a échoué.",
         originalDxf: filename,
         actions: actions,
@@ -54,6 +77,7 @@ exports.convertDxfToSequence = async (req, res) => {
   } catch (error) {
     console.error("Erreur lors de la conversion DXF vers séquence d'actions:", error);
     res.status(500).json({ 
+      success: false,
       message: "Erreur lors de la conversion DXF vers séquence d'actions.", 
       errorDetails: error.message 
     });
@@ -73,6 +97,9 @@ exports.getSequence = (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     fs.createReadStream(filePath).pipe(res);
   } else {
-    res.status(404).json({ message: 'Fichier de séquence non trouvé.' });
+    res.status(404).json({ 
+      success: false,
+      message: 'Fichier de séquence non trouvé.' 
+    });
   }
 }; 
