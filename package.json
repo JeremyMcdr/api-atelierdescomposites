@@ -1,0 +1,30 @@
+{
+  "name": "svg_api",
+  "version": "1.0.0",
+  "description": "API pour manipuler des fichiers SVG et les transformer en instructions machine.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  },
+  "keywords": [
+    "svg",
+    "api",
+    "express"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.6.5",
+    "dxf": "^5.2.0",
+    "express": "^4.17.1",
+    "multer": "^1.4.3",
+    "svg-path-parser": "^1.1.0",
+    "swagger-ui-express": "^5.0.0",
+    "xml2js": "^0.6.2",
+    "yamljs": "^0.3.0"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.15"
+  }
+}

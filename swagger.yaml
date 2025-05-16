@@ -1,0 +1,622 @@
+openapi: 3.0.0
+info:
+  title: API de Manipulation SVG
+  description: |
+    API pour manipuler des fichiers SVG, les convertir en DXF et en séquences d'actions pour contrôler des moteurs.
+    Cette API permet de transformer des dessins vectoriels en instructions machines.
+  version: 1.0.0
+  contact:
+    name: Atelier des Composites
+servers:
+  - url: http://localhost:30001/api
+    description: Serveur de développement local
+  - url: https://api.example.com/api
+    description: Serveur de production (exemple)
+
+tags:
+  - name: SVG
+    description: Opérations liées aux fichiers SVG
+  - name: DXF
+    description: Opérations liées aux fichiers DXF
+  - name: DXF-Sequence
+    description: Opérations liées à la conversion de DXF en séquences d'actions
+  - name: Combined
+    description: Opérations combinées pour traiter les fichiers en une seule étape
+  - name: Direct
+    description: Opérations directes d'upload et de traitement
+
+paths:
+  /svg:
+    get:
+      tags:
+        - SVG
+      summary: Récupérer tous les fichiers SVG
+      description: Récupère la liste de tous les fichiers SVG disponibles sur le serveur.
+      operationId: getAllSVGs
+      responses:
+        '200':
+          description: Liste des fichiers SVG récupérée avec succès
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                    description: Nombre de fichiers SVG trouvés
+                    example: 3
+                  files:
+                    type: array
+                    description: Liste des fichiers SVG
+                    items:
+                      type: object
+                      properties:
+                        filename:
+                          type: string
+                          description: Nom du fichier SVG
+                          example: mysvg.svg
+                        size:
+                          type: integer
+                          description: Taille du fichier en octets
+                          example: 1024
+                        created:
+                          type: string
+                          format: date-time
+                          description: Date de création du fichier
+                          example: 2023-12-01T10:00:00.000Z
+                        modified:
+                          type: string
+                          format: date-time
+                          description: Date de dernière modification du fichier
+                          example: 2023-12-01T10:30:00.000Z
+                        url:
+                          type: string
+                          description: URL pour accéder au fichier
+                          example: /api/svg/mysvg.svg
+        '500':
+          description: Erreur lors de la récupération des fichiers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /svg/upload:
+    post:
+      tags:
+        - SVG
+      summary: Téléverser un fichier SVG
+      description: Téléverse un fichier SVG sur le serveur pour un traitement ultérieur.
+      operationId: uploadSVG
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - svgfile
+              properties:
+                svgfile:
+                  type: string
+                  format: binary
+                  description: Le fichier SVG à téléverser
+      responses:
+        '201':
+          description: Fichier SVG téléversé avec succès
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Fichier SVG téléversé avec succès.
+                  filename:
+                    type: string
+                    example: 1640087432456-mysvg.svg
+        '400':
+          description: Aucun fichier SVG fourni
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /svg/{filename}:
+    get:
+      tags:
+        - SVG
+      summary: Récupérer un fichier SVG
+      description: Récupère un fichier SVG précédemment téléversé.
+      operationId: getSVG
+      parameters:
+        - name: filename
+          in: path
+          description: Nom du fichier SVG à récupérer
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Fichier SVG trouvé et renvoyé
+          content:
+            image/svg+xml:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Fichier SVG non trouvé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags:
+        - SVG
+      summary: Mettre à jour un fichier SVG
+      description: Met à jour un fichier SVG existant en le remplaçant par un nouveau.
+      operationId: updateSVG
+      parameters:
+        - name: filename
+          in: path
+          description: Nom du fichier SVG à mettre à jour
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - svgfile
+              properties:
+                svgfile:
+                  type: string
+                  format: binary
+                  description: Le nouveau fichier SVG
+      responses:
+        '200':
+          description: Fichier SVG mis à jour avec succès
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Fichier SVG mis à jour avec succès.
+                  filename:
+                    type: string
+                    example: mysvg.svg
+        '400':
+          description: Aucun fichier SVG fourni pour la mise à jour
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Fichier SVG à mettre à jour non trouvé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Erreur lors de la mise à jour du fichier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - SVG
+      summary: Supprimer un fichier SVG
+      description: Supprime un fichier SVG du serveur.
+      operationId: deleteSVG
+      parameters:
+        - name: filename
+          in: path
+          description: Nom du fichier SVG à supprimer
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Fichier SVG supprimé avec succès
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Fichier SVG supprimé avec succès.
+                  deletedFile:
+                    type: string
+                    example: mysvg.svg
+        '404':
+          description: Fichier SVG non trouvé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Erreur lors de la suppression du fichier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /svg/execute/{filename}:
+    post:
+      tags:
+        - SVG
+      summary: Transformer un SVG en séquence d'actions
+      description: Transforme un fichier SVG en une séquence d'actions et optionnellement envoie le résultat à une API externe.
+      operationId: executeSVG
+      parameters:
+        - name: filename
+          in: path
+          description: Nom du fichier SVG à transformer
+          required: true
+          schema:
+            type: string
+        - name: sendToApi
+          in: query
+          description: Indique si les actions doivent être envoyées à l'API externe
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: apiUrl
+          in: query
+          description: URL de l'API externe (si différente de celle configurée par défaut)
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Séquence d'actions générée avec succès
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SequenceResponse'
+        '404':
+          description: Fichier SVG non trouvé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Erreur lors de la transformation ou de la sauvegarde
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /dxf/convert/{filename}:
+    get:
+      tags:
+        - DXF
+      summary: Convertir un SVG en DXF
+      description: Convertit un fichier SVG en format DXF.
+      operationId: convertToDXF
+      parameters:
+        - name: filename
+          in: path
+          description: Nom du fichier SVG à convertir
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Conversion réussie
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: SVG converti en DXF avec succès.
+                  sourceFile:
+                    type: string
+                    example: mysvg.svg
+                  dxfFile:
+                    type: string
+                    example: mysvg.dxf
+                  dxfPath:
+                    type: string
+                    example: /generated_dxf/mysvg.dxf
+        '404':
+          description: Fichier SVG non trouvé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Erreur lors de la conversion
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /dxf/download/{filename}:
+    get:
+      tags:
+        - DXF
+      summary: Télécharger un fichier DXF
+      description: Télécharge un fichier DXF précédemment généré.
+      operationId: getDXF
+      parameters:
+        - name: filename
+          in: path
+          description: Nom du fichier DXF à télécharger
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Fichier DXF trouvé et renvoyé
+          content:
+            application/dxf:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Fichier DXF non trouvé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /dxf-sequence/execute/{filename}:
+    get:
+      tags:
+        - DXF-Sequence
+      summary: Convertir un DXF en séquence d'actions
+      description: Convertit un fichier DXF en une séquence d'actions.
+      operationId: convertDxfToSequence
+      parameters:
+        - name: filename
+          in: path
+          description: Nom du fichier DXF à convertir
+          required: true
+          schema:
+            type: string
+        - name: closePolygons
+          in: query
+          description: Indique si les polygones doivent être automatiquement fermés
+          required: false
+          schema:
+            type: boolean
+            default: true
+        - name: sendToApi
+          in: query
+          description: Indique si les actions doivent être envoyées à l'API externe
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: apiUrl
+          in: query
+          description: URL de l'API externe (si différente de celle configurée par défaut)
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Séquence d'actions générée avec succès
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SequenceResponse'
+        '404':
+          description: Fichier DXF non trouvé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Erreur lors de la conversion ou de la sauvegarde
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /dxf-sequence/sequence/{filename}:
+    get:
+      tags:
+        - DXF-Sequence
+      summary: Récupérer une séquence d'actions
+      description: Récupère une séquence d'actions précédemment générée.
+      operationId: getSequence
+      parameters:
+        - name: filename
+          in: path
+          description: Nom du fichier de séquence à récupérer
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Séquence d'actions trouvée et renvoyée
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Action'
+        '404':
+          description: Fichier de séquence non trouvé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /combined/svg-to-sequence/{filename}:
+    get:
+      tags:
+        - Combined
+      summary: Convertir directement un SVG en séquence d'actions
+      description: Convertit directement un fichier SVG en une séquence d'actions en une seule étape.
+      operationId: convertSVGtoSequence
+      parameters:
+        - name: filename
+          in: path
+          description: Nom du fichier SVG à convertir
+          required: true
+          schema:
+            type: string
+        - name: closePolygons
+          in: query
+          description: Indique si les polygones doivent être automatiquement fermés
+          required: false
+          schema:
+            type: boolean
+            default: true
+        - name: sendToApi
+          in: query
+          description: Indique si les actions doivent être envoyées à l'API externe
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: apiUrl
+          in: query
+          description: URL de l'API externe (si différente de celle configurée par défaut)
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Séquence d'actions générée avec succès
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SequenceResponse'
+        '404':
+          description: Fichier SVG non trouvé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Erreur lors de la conversion ou de la sauvegarde
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /direct/svg-to-sequence:
+    post:
+      tags:
+        - Direct
+      summary: Téléverser et convertir directement un SVG en séquence d'actions
+      description: Téléverse un fichier SVG et le convertit directement en une séquence d'actions.
+      operationId: uploadAndConvert
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - svgfile
+              properties:
+                svgfile:
+                  type: string
+                  format: binary
+                  description: Le fichier SVG à téléverser et convertir
+                closePolygons:
+                  type: boolean
+                  description: Indique si les polygones doivent être automatiquement fermés
+                  default: true
+                sendToApi:
+                  type: boolean
+                  description: Indique si les actions doivent être envoyées à l'API externe
+                  default: false
+                apiUrl:
+                  type: string
+                  description: URL de l'API externe (si différente de celle configurée par défaut)
+      responses:
+        '200':
+          description: Séquence d'actions générée avec succès
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SequenceResponse'
+        '400':
+          description: Aucun fichier SVG fourni
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Erreur lors de la conversion ou de la sauvegarde
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    Action:
+      type: object
+      required:
+        - action
+      properties:
+        action:
+          type: string
+          description: Type d'action (AVANCER, PLIER, COUPER)
+          enum: [AVANCER, PLIER, COUPER]
+          example: AVANCER
+        valeur:
+          type: number
+          format: float
+          description: Valeur associée à l'action (distance ou angle)
+          example: 10.5
+
+    SequenceResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Message de succès
+          example: Séquence d'actions générée et sauvegardée pour mysvg.svg et envoyée à l'API externe
+        originalSvg:
+          type: string
+          description: Nom du fichier SVG original
+          example: mysvg.svg
+        sequenceFile:
+          type: string
+          description: Nom du fichier contenant la séquence d'actions
+          example: mysvg_1640087432456.json
+        sequenceFileLocation:
+          type: string
+          description: Chemin complet vers le fichier de séquence
+          example: /generated_sequences/mysvg_1640087432456.json
+        actions:
+          type: array
+          description: Liste des actions générées
+          items:
+            $ref: '#/components/schemas/Action'
+        apiSent:
+          type: boolean
+          description: Indique si la séquence a été envoyée à l'API externe
+          example: true
+        apiResponse:
+          type: object
+          description: Réponse de l'API externe (si disponible)
+
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Message d'erreur
+          example: Fichier SVG non trouvé.
+        errorDetails:
+          type: string
+          description: Détails techniques de l'erreur (si disponibles)
+          example: Error reading file from disk. 
