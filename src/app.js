@@ -14,6 +14,7 @@ const dxfRoutes = require("./routes/dxfRoutes");
 const dxfSequenceRoutes = require("./routes/dxfSequenceRoutes");
 const combinedRoutes = require("./routes/combinedRoutes");
 const directUploadRoutes = require("./routes/directUploadRoutes");
+const emergencyRoutes = require("./routes/emergencyRoutes");
 
 const app = express();
 
@@ -51,6 +52,7 @@ app.use("/api/dxf", dxfRoutes);
 app.use("/api/dxf-sequence", dxfSequenceRoutes);
 app.use("/api/combined", combinedRoutes);
 app.use("/api/direct", directUploadRoutes);
+app.use("/api/emergency", emergencyRoutes);
 
 // Route de test
 app.get("/", (req, res) => {

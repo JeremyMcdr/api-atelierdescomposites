@@ -1,35 +1,39 @@
 [
   {
-    "action": "PLIER",
-    "valeur": 20.16
-  },
-  {
     "action": "AVANCER",
-    "valeur": 319.172
+    "valeur": 256.628
   },
   {
     "action": "PLIER",
-    "valeur": 85.94
+    "valeur": -111.79
   },
   {
     "action": "AVANCER",
-    "valeur": 450.682
+    "valeur": 268.405
   },
   {
     "action": "PLIER",
-    "valeur": -128.6
+    "valeur": 234
   },
   {
     "action": "AVANCER",
-    "valeur": 397.232
+    "valeur": 294.539
   },
   {
     "action": "PLIER",
-    "valeur": -108.24
+    "valeur": -122.21
   },
   {
     "action": "AVANCER",
-    "valeur": 370.844
+    "valeur": 513.256
+  },
+  {
+    "action": "PLIER",
+    "valeur": -145.03
+  },
+  {
+    "action": "AVANCER",
+    "valeur": 434.793
   },
   {
     "action": "COUPER"
