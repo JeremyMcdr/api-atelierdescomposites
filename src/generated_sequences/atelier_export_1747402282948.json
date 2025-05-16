@@ -1,0 +1,37 @@
+[
+  {
+    "action": "PLIER",
+    "valeur": 20.16
+  },
+  {
+    "action": "AVANCER",
+    "valeur": 319.172
+  },
+  {
+    "action": "PLIER",
+    "valeur": 85.94
+  },
+  {
+    "action": "AVANCER",
+    "valeur": 450.682
+  },
+  {
+    "action": "PLIER",
+    "valeur": -128.6
+  },
+  {
+    "action": "AVANCER",
+    "valeur": 397.232
+  },
+  {
+    "action": "PLIER",
+    "valeur": -108.24
+  },
+  {
+    "action": "AVANCER",
+    "valeur": 370.844
+  },
+  {
+    "action": "COUPER"
+  }
+]

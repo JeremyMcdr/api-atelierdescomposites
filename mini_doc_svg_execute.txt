@@ -1,0 +1,31 @@
+## Route: POST /api/svg/execute/:filename
+
+**Objectif:** Transforme un fichier SVG en une séquence d'actions et peut l'envoyer à une API externe.
+
+**Paramètres d'URL:**
+* `filename` (requis): Nom du fichier SVG existant.
+
+**Paramètres de Requête (Query):**
+* `sendToApi` (optionnel, booléen): Si true, envoie les actions à `apiUrl`. Défaut via `appConfig.ENABLE_AUTO_API_SEND`.
+* `apiUrl` (optionnel, string): URL de l'API externe. Défaut via `appConfig.TARGET_API_URL`.
+
+**Réponse Succès (200 OK):**
+JSON avec:
+* `message`: Statut de l'opération.
+* `originalSvg`: Nom du SVG d'entrée.
+* `sequenceFile`: Nom du fichier JSON de sortie contenant les actions.
+* `sequenceFileLocation`: Chemin complet du fichier de séquence.
+* `actions`: Tableau des actions générées (ex: { "action": "AVANCER", "valeur": 10 }).
+* `apiSent`: Booléen, statut de l'envoi à l'API.
+* `apiResponse`: Réponse de l'API externe (si `apiSent` est true).
+
+**Réponses Erreur:**
+* `404 Not Found`: Fichier SVG non trouvé.
+* `500 Internal Server Error`: Échec de transformation SVG ou de sauvegarde de la séquence.
+
+**Processus:**
+1. Vérifie l'existence du SVG.
+2. Lit et transforme le SVG en actions (via `svgService.transformSVGToActions`).
+3. Optionnellement, envoie les actions à l'API externe (via `apiService.sendActionsToApi`).
+4. Sauvegarde les actions en fichier JSON dans `sequencesDir`.
+5. Retourne le JSON de résultat. 

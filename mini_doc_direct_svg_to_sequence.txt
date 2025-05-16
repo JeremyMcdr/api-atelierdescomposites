@@ -1,0 +1,33 @@
+## Route: POST /api/direct/svg-to-sequence
+
+**Objectif:** Téléverse un SVG et le convertit directement en séquence d'actions. Peut envoyer à une API externe.
+
+**Type de Requête:** `POST`, `multipart/form-data`
+
+**Paramètres (form-data):**
+* `svgfile` (requis, fichier): Le fichier SVG.
+* `sendToApi` (optionnel, booléen): `true` pour envoyer à `apiUrl`. Défaut via `appConfig.ENABLE_AUTO_API_SEND`.
+* `apiUrl` (optionnel, string): URL de l'API externe. Défaut via `appConfig.TARGET_API_URL`.
+* `closePolygons` (optionnel, booléen): `true` pour fermer les polygones. Défaut: `true`.
+
+**Réponse Succès (200 OK):**
+JSON avec:
+* `message`: Statut.
+* `originalSvg`: Nom du fichier SVG sauvegardé sur le serveur (unique).
+* `originalFilename`: Nom original du fichier SVG téléversé.
+* `sequenceFile`: Nom du fichier JSON de sortie (actions).
+* `sequenceFileLocation`: Chemin complet du fichier de séquence.
+* `actions`: Tableau des actions.
+* `apiSent`: Booléen, statut de l'envoi API.
+* `apiResponse`: Réponse de l'API externe (si `apiSent` est true).
+
+**Réponses Erreur:**
+* `400 Bad Request`: Aucun fichier SVG fourni.
+* `500 Internal Server Error`: Échec de conversion ou de sauvegarde.
+
+**Processus Clés:**
+1. Réception du fichier SVG et des options via `multipart/form-data`.
+2. Conversion SVG -> DXF -> Séquence d'actions (via `combinedService.convertSVGToActions`).
+3. Optionnellement, envoi des actions à l'API externe.
+4. Sauvegarde des actions en fichier JSON.
+5. Retourne le JSON de résultat. 
