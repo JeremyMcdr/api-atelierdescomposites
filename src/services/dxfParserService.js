@@ -16,15 +16,30 @@ function calculateVector(point1, point2) {
 }
 
 /**
+ * Calcule le point milieu entre deux points
+ * @param {object} point1 - Premier point {x, y}
+ * @param {object} point2 - Second point {x, y}
+ * @returns {object} - Point milieu {x, y}
+ */
+function calculateMidpoint(point1, point2) {
+  return {
+    x: (point1.x + point2.x) / 2,
+    y: (point1.y + point2.y) / 2
+  };
+}
+
+/**
  * Parse un fichier DXF et le transforme en séquence d'actions
  * @param {string} dxfFilePath - Chemin vers le fichier DXF
  * @param {object} options - Options de conversion
  * @param {boolean} options.closePolygons - Si true, ferme automatiquement les polygones (défaut: true)
+ * @param {boolean} options.startAtLongestSegment - Si true, commence au milieu du segment le plus long (défaut: true)
  * @returns {Promise<Array>} - Une promesse résolvant avec un tableau d'actions
  */
 async function parseDxfToActions(dxfFilePath, options = {}) {
-  // Option par défaut pour fermer les polygones
+  // Options par défaut
   const shouldClosePolygons = options.closePolygons !== undefined ? options.closePolygons : true;
+  const startAtLongestSegment = options.startAtLongestSegment !== undefined ? options.startAtLongestSegment : true;
   
   try {
     // Vérifier que le fichier DXF existe
@@ -39,7 +54,10 @@ async function parseDxfToActions(dxfFilePath, options = {}) {
     const entities = extractEntitiesFromDXF(dxfContent);
     
     // Convertir les entités en actions
-    return convertEntitiesToActions(entities, { shouldClosePolygons });
+    return convertEntitiesToActions(entities, { 
+      shouldClosePolygons,
+      startAtLongestSegment
+    });
   } catch (error) {
     console.error("Erreur lors du parsing du DXF:", error);
     throw error;
@@ -167,18 +185,111 @@ function extractEntitiesFromDXF(dxfContent) {
 }
 
 /**
+ * Trouve le segment le plus long dans les entités et retourne son point milieu et son angle
+ * @param {Array} entities - Liste des entités
+ * @returns {Object|null} - { midpoint, angle, length } ou null si aucun segment trouvé
+ */
+function findLongestSegment(entities) {
+  let longestSegment = {
+    start: null,
+    end: null,
+    length: 0,
+    angle: 0
+  };
+
+  // Parcourir toutes les entités pour trouver le segment le plus long
+  for (const entity of entities) {
+    if (entity.type === 'LINE') {
+      // Pour les lignes, c'est simple
+      const vector = calculateVector(entity.start, entity.end);
+      if (vector.distance > longestSegment.length) {
+        longestSegment = {
+          start: entity.start,
+          end: entity.end,
+          length: vector.distance,
+          angle: vector.angle
+        };
+      }
+    } else if (entity.type === 'LWPOLYLINE' || entity.type === 'POLYLINE') {
+      // Pour les polylignes, parcourir tous les segments
+      const vertices = entity.vertices;
+      if (vertices.length > 1) {
+        for (let i = 0; i < vertices.length - 1; i++) {
+          const vector = calculateVector(vertices[i], vertices[i + 1]);
+          if (vector.distance > longestSegment.length) {
+            longestSegment = {
+              start: vertices[i],
+              end: vertices[i + 1],
+              length: vector.distance,
+              angle: vector.angle
+            };
+          }
+        }
+        
+        // Vérifier aussi le segment de fermeture si la polyligne est fermée
+        if (entity.closed && vertices.length > 2) {
+          const vector = calculateVector(vertices[vertices.length - 1], vertices[0]);
+          if (vector.distance > longestSegment.length) {
+            longestSegment = {
+              start: vertices[vertices.length - 1],
+              end: vertices[0],
+              length: vector.distance,
+              angle: vector.angle
+            };
+          }
+        }
+      }
+    }
+    // Ne pas prendre en compte les cercles pour le segment le plus long
+  }
+  
+  if (!longestSegment.start) {
+    return null;
+  }
+  
+  return {
+    midpoint: calculateMidpoint(longestSegment.start, longestSegment.end),
+    angle: longestSegment.angle,
+    length: longestSegment.length
+  };
+}
+
+/**
  * Convertit les entités extraites du DXF en actions machine
  * @param {Array} entities - Liste des entités
  * @param {object} options - Options de conversion
  * @param {boolean} options.shouldClosePolygons - Si true, ferme automatiquement les polygones
+ * @param {boolean} options.startAtLongestSegment - Si true, commence au milieu du segment le plus long
  * @returns {Array} - Liste des actions
  */
 function convertEntitiesToActions(entities, options = {}) {
-  const { shouldClosePolygons = true } = options;
+  const { shouldClosePolygons = true, startAtLongestSegment = true } = options;
   const actions = [];
+  
+  // Position et angle de départ
   let currentPosition = { x: 0, y: 0 };
-  let currentAngle = 0; // Angle actuel de la machine en degrés
+  let currentAngle = 0;
+  
+  // Si on doit commencer au milieu du segment le plus long
+  if (startAtLongestSegment) {
+    const longestSegmentInfo = findLongestSegment(entities);
+    if (longestSegmentInfo) {
+      console.log(`Segment le plus long trouvé: longueur ${longestSegmentInfo.length.toFixed(2)}, angle ${longestSegmentInfo.angle.toFixed(2)}`);
+      // Commencer au milieu du segment le plus long
+      currentPosition = longestSegmentInfo.midpoint;
+      currentAngle = longestSegmentInfo.angle;
+      
+      // Ajouter la première action (AVANCER de la moitié de la longueur)
+      const halfLength = longestSegmentInfo.length / 2;
+      if (halfLength > 0.001) {
+        actions.push({ action: 'AVANCER', valeur: parseFloat(halfLength.toFixed(3)) });
+      }
+    } else {
+      console.log("Aucun segment trouvé pour commencer, utilisation de la position (0,0)");
+    }
+  }
 
+  // Traiter toutes les entités
   for (const entity of entities) {
     switch (entity.type) {
       case 'LINE':

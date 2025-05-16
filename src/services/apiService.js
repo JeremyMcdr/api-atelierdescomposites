@@ -13,7 +13,16 @@ async function sendActionsToApi(actions, targetApiUrl, options = {}) {
   }
 
   try {
-    console.log(`Envoi de ${actions.length} actions à l'API: ${targetApiUrl}`);
+    // Logs détaillés pour le débogage
+    console.log('----------------------------------------');
+    console.log(`ENVOI DE DONNÉES À L'API EXTERNE`);
+    console.log(`URL COMPLÈTE: ${targetApiUrl}`);
+    console.log(`ADRESSE IP/HÔTE: ${new URL(targetApiUrl).hostname}`);
+    console.log(`CHEMIN: ${new URL(targetApiUrl).pathname}`);
+    console.log(`NOMBRE D'ACTIONS: ${actions.length}`);
+    console.log(`PREMIÈRE ACTION: ${JSON.stringify(actions[0])}`);
+    console.log(`DERNIÈRE ACTION: ${JSON.stringify(actions[actions.length - 1])}`);
+    console.log('----------------------------------------');
     
     const response = await axios.post(targetApiUrl, actions, {
       headers: {
@@ -25,12 +34,20 @@ async function sendActionsToApi(actions, targetApiUrl, options = {}) {
     });
     
     console.log(`Réponse de l'API reçue avec statut ${response.status}`);
+    console.log(`Données de réponse: ${JSON.stringify(response.data)}`);
     return response.data;
   } catch (error) {
-    console.error('Erreur lors de l\'envoi des actions à l\'API:', error.message);
+    console.error('----------------------------------------');
+    console.error(`ERREUR LORS DE L'ENVOI À L'API: ${targetApiUrl}`);
+    console.error(`Message d'erreur: ${error.message}`);
     if (error.response) {
-      console.error(`Statut: ${error.response.status}, Données: ${JSON.stringify(error.response.data)}`);
+      console.error(`Statut: ${error.response.status}`);
+      console.error(`Données: ${JSON.stringify(error.response.data)}`);
+    } else if (error.request) {
+      console.error('Aucune réponse reçue du serveur. Vérifiez que le serveur est accessible.');
+      console.error(`Détails de la requête: ${JSON.stringify(error.request._currentUrl || error.request.path)}`);
     }
+    console.error('----------------------------------------');
     throw error;
   }
 }
