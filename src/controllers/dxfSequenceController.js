@@ -22,16 +22,21 @@ exports.convertDxfToSequence = async (req, res) => {
   // Options de conversion (depuis query params)
   const closePolygons = req.query.closePolygons !== 'false'; // Par défaut à true
   const startAtLongestSegment = req.query.startAtLongestSegment !== 'false'; // Par défaut à true
+  const ignoreAngleChecks = req.query.ignoreAngleChecks === 'true'; // Par défaut à false
   
   if (!fs.existsSync(dxfFilePath)) {
-    return res.status(404).json({ message: 'Fichier DXF non trouvé.' });
+    return res.status(404).json({ 
+      success: false,
+      message: 'Fichier DXF non trouvé.' 
+    });
   }
   
   try {
     // Générer la séquence d'actions à partir du fichier DXF
     const result = await dxfParserService.parseDxfToActions(dxfFilePath, {
       closePolygons,
-      startAtLongestSegment
+      startAtLongestSegment,
+      ignoreAngleChecks
     });
     
     // Vérifier si le résultat contient des erreurs d'angle

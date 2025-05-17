@@ -13,16 +13,16 @@ const appConfig = require('../config/appConfig');
  * @param {boolean} options.sendToApi - Si true, envoie les actions à l'API externe
  * @param {string} options.apiUrl - URL de l'API cible (remplace celle de la config)
  * @param {boolean} options.closePolygons - Si true, ferme automatiquement les polygones
+ * @param {boolean} options.ignoreAngleChecks - Si true, ignore les vérifications d'angle
  * @returns {Promise<Object>} - Une promesse résolvant avec les actions et la réponse de l'API
  */
 async function convertSVGToActions(svgFilePath, dxfOutputDir, options = {}) {
   const { 
     sendToApi = appConfig.ENABLE_AUTO_API_SEND, 
     apiUrl = appConfig.TARGET_API_URL,
-    closePolygons = true 
+    closePolygons = true,
+    ignoreAngleChecks = false
   } = options;
-  
-  let apiResponse = null;
   
   try {
     // 1. Vérifier que le fichier SVG existe
@@ -42,7 +42,10 @@ async function convertSVGToActions(svgFilePath, dxfOutputDir, options = {}) {
 
     // 4. Convertir le DXF en séquence d'actions
     console.log(`Conversion du DXF en séquence d'actions: ${dxfFilePath}`);
-    const result = await dxfParserService.parseDxfToActions(dxfFilePath, { closePolygons });
+    const result = await dxfParserService.parseDxfToActions(dxfFilePath, { 
+      closePolygons,
+      ignoreAngleChecks
+    });
     
     // Vérifier si le résultat contient des erreurs d'angle
     if (!result.success) {
@@ -59,25 +62,29 @@ async function convertSVGToActions(svgFilePath, dxfOutputDir, options = {}) {
     const actions = result.actions;
     console.log(`Séquence d'actions générée avec ${actions.length} actions`);
 
-    // 5. Envoyer à l'API externe si demandé
+    // Générer un ID unique pour cette pièce
+    const pieceId = `piece_${path.basename(svgFilePath, path.extname(svgFilePath))}_${Date.now()}`;
+    
+    // 5. Envoyer à l'API externe en arrière-plan si demandé
+    // Ne pas attendre la réponse pour ne pas bloquer le client
     if (sendToApi && apiUrl) {
-      try {
-        console.log(`Envoi des actions à l'API externe: ${apiUrl}`);
-        apiResponse = await apiService.sendActionsToApi(actions, apiUrl, {
-          timeout: appConfig.API_REQUEST_TIMEOUT
-        });
-        console.log('Actions envoyées avec succès à l\'API externe');
-      } catch (apiError) {
-        console.error('Erreur lors de l\'envoi à l\'API externe:', apiError.message);
-        // Ne pas interrompre le traitement en cas d'échec d'envoi API
-      }
+      console.log(`Envoi des actions à l'API externe: ${apiUrl} (ID: ${pieceId})`);
+      // Utiliser une fonction asynchrone sans await pour ne pas bloquer
+      apiService.sendActionsToApi(actions, apiUrl, {
+        timeout: appConfig.API_REQUEST_TIMEOUT,
+        pieceId
+      }).then(response => {
+        console.log(`Actions envoyées avec succès à l'API externe pour la pièce ${pieceId}`);
+      }).catch(apiError => {
+        console.error(`Erreur lors de l'envoi à l'API externe pour la pièce ${pieceId}:`, apiError.message);
+      });
     }
 
     return {
       success: true,
       actions,
-      apiResponse,
-      apiSent: Boolean(apiResponse)
+      apiSent: sendToApi,
+      pieceId: sendToApi ? pieceId : null
     };
   } catch (error) {
     console.error("Erreur lors de la conversion SVG -> Actions:", error);

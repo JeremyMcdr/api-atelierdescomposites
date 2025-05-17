@@ -36,7 +36,8 @@ exports.convertSVGtoSequence = async (req, res) => {
   const options = {
     sendToApi: req.query.sendToApi === 'true' || req.query.sendToApi === true,
     apiUrl: req.query.apiUrl || appConfig.TARGET_API_URL,
-    closePolygons: !(req.query.closePolygons === 'false' || req.query.closePolygons === false)
+    closePolygons: !(req.query.closePolygons === 'false' || req.query.closePolygons === false),
+    ignoreAngleChecks: req.query.ignoreAngleChecks === 'true'
   };
   
   console.log(`Options pour la conversion: ${JSON.stringify(options)}`);

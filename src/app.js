@@ -4,6 +4,9 @@ const fs = require("fs");
 const swaggerUi = require("swagger-ui-express");
 const YAML = require("yamljs");
 const cors = require("cors");
+const morgan = require('morgan');
+const healthCheckService = require('./services/healthCheckService');
+const emergencyStopService = require('./services/emergencyStopService');
 
 // Charger le fichier swagger.yaml
 const swaggerDocument = YAML.load(path.join(__dirname, "../swagger.yaml"));
@@ -15,6 +18,13 @@ const dxfSequenceRoutes = require("./routes/dxfSequenceRoutes");
 const combinedRoutes = require("./routes/combinedRoutes");
 const directUploadRoutes = require("./routes/directUploadRoutes");
 const emergencyRoutes = require("./routes/emergencyRoutes");
+const testRoutes = require("./routes/testRoutes");
+const statusRoutes = require("./routes/statusRoutes");
+const svgLibraryRoutes = require("./routes/svgLibraryRoutes");
+
+// Middleware
+const configMiddleware = require('./middlewares/configMiddleware');
+const errorMiddleware = require('./middlewares/errorMiddleware');
 
 const app = express();
 
@@ -42,6 +52,24 @@ if (!fs.existsSync(dxfDir)) {
   fs.mkdirSync(dxfDir, { recursive: true });
 }
 
+// Créer le dossier pour les logs s'il n'existe pas
+const logsDir = path.join(__dirname, "logs");
+if (!fs.existsSync(logsDir)) {
+  fs.mkdirSync(logsDir, { recursive: true });
+}
+
+// Créer le dossier pour la bibliothèque SVG s'il n'existe pas
+const svgLibraryDir = path.join(__dirname, 'svg_library');
+if (!fs.existsSync(svgLibraryDir)) {
+  fs.mkdirSync(svgLibraryDir, { recursive: true });
+}
+
+// Logging middleware
+app.use(morgan('dev'));
+app.use(morgan('combined', {
+  stream: fs.createWriteStream(path.join(logsDir, 'access.log'), { flags: 'a' })
+}));
+
 // Route pour la documentation Swagger
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
@@ -53,6 +81,9 @@ app.use("/api/dxf-sequence", dxfSequenceRoutes);
 app.use("/api/combined", combinedRoutes);
 app.use("/api/direct", directUploadRoutes);
 app.use("/api/emergency", emergencyRoutes);
+app.use("/api/test", testRoutes);
+app.use("/api/status", statusRoutes);
+app.use("/api/library", svgLibraryRoutes);
 
 // Route de test
 app.get("/", (req, res) => {
@@ -60,5 +91,61 @@ app.get("/", (req, res) => {
     'API SVG fonctionnelle! Consultez la documentation à <a href="/api-docs">cette adresse</a>.'
   );
 });
+
+// Route d'accueil et de santé
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Bienvenue sur l\'API de conversion SVG',
+    status: 'running',
+    links: {
+      documentation: '/docs',
+      healthcheck: '/api/healthcheck'
+    }
+  });
+});
+
+// Route de santé de l'API
+app.get('/api/healthcheck', (req, res) => {
+  res.json({
+    status: 'ok',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Route pour l'arrêt d'urgence
+app.post('/api/emergency-stop', (req, res) => {
+  const stopResult = emergencyStopService.triggerEmergencyStop();
+  if (stopResult.success) {
+    res.status(200).json({
+      success: true,
+      message: 'Arrêt d\'urgence déclenché avec succès',
+      details: stopResult
+    });
+  } else {
+    res.status(500).json({
+      success: false,
+      message: 'Échec du déclenchement de l\'arrêt d\'urgence',
+      error: stopResult.error
+    });
+  }
+});
+
+// Route pour vérifier la santé de l'API cible
+app.get('/api/target-health', async (req, res) => {
+  try {
+    const healthCheck = await healthCheckService.checkTargetApiHealth();
+    res.json(healthCheck);
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: 'Erreur lors de la vérification de santé de l\'API cible',
+      error: error.message
+    });
+  }
+});
+
+// Middleware de gestion d'erreurs
+app.use(errorMiddleware);
 
 module.exports = app;

@@ -40,7 +40,8 @@ exports.uploadAndConvert = async (req, res) => {
   const options = {
     sendToApi: req.body.sendToApi === 'true' || req.body.sendToApi === true,
     apiUrl: req.body.apiUrl || appConfig.TARGET_API_URL,
-    closePolygons: !(req.body.closePolygons === 'false' || req.body.closePolygons === false)
+    closePolygons: !(req.body.closePolygons === 'false' || req.body.closePolygons === false),
+    ignoreAngleChecks: req.body.ignoreAngleChecks === 'true'
   };
   
   console.log(`Options pour la conversion: ${JSON.stringify(options)}`);
@@ -62,17 +63,18 @@ exports.uploadAndConvert = async (req, res) => {
       });
     }
     
-    const { actions, apiResponse, apiSent } = result;
+    const { actions, apiSent, pieceId } = result;
     
     // Sauvegarder les actions dans un fichier JSON
     const sequenceFilename = `${path.parse(originalFilename).name}_${Date.now()}.json`;
     const sequenceFilePath = path.join(sequencesDir, sequenceFilename);
     
     try {
+      // Écrire le fichier de séquence
       fs.writeFileSync(sequenceFilePath, JSON.stringify(actions, null, 2));
       console.log(`Séquence d'actions sauvegardée dans : ${sequenceFilePath}`);
       
-      // Construire la réponse
+      // Revenir au format JSON original pour la compatibilité avec le frontend
       const response = {
         success: true,
         message: `Séquence d'actions générée directement depuis l'upload SVG et sauvegardée`,
@@ -84,12 +86,12 @@ exports.uploadAndConvert = async (req, res) => {
         apiSent: apiSent
       };
       
-      // Ajouter les informations de l'API si disponibles
-      if (apiSent) {
-        response.apiResponse = apiResponse;
-        response.message += ` et envoyée à l'API externe`;
-      } else if (options.sendToApi) {
-        response.message += `. L'envoi à l'API externe a échoué.`;
+      // Ajouter des informations sur l'envoi à l'API et la production
+      if (apiSent && pieceId) {
+        response.message += ` et envoyée pour production`;
+        response.pieceId = pieceId;
+        response.productionStatus = 'ENVOYE';
+        response.productionMessage = 'La pièce a été envoyée à la machine et est en cours de traitement';
       }
       
       res.status(200).json(response);
@@ -101,8 +103,6 @@ exports.uploadAndConvert = async (req, res) => {
         originalSvg: req.file.filename,
         originalFilename: originalFilename,
         actions: actions,
-        apiSent: apiSent,
-        apiResponse: apiSent ? apiResponse : null,
         errorDetails: writeError.message
       });
     }
