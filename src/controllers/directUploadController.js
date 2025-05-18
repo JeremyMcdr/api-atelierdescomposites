@@ -3,6 +3,7 @@ const fs = require('fs');
 const combinedService = require('../services/combinedService');
 const appConfig = require('../config/appConfig');
 const dxfParserService = require('../services/dxfParserService');
+const productionJobService = require('../services/productionJobService');
 
 const uploadsDir = path.join(__dirname, '../uploads');
 const dxfDir = path.join(__dirname, '../generated_dxf');
@@ -66,13 +67,26 @@ exports.uploadAndConvert = async (req, res) => {
     const { actions, apiSent, pieceId } = result;
     
     // Sauvegarder les actions dans un fichier JSON
-    const sequenceFilename = `${path.parse(originalFilename).name}_${Date.now()}.json`;
+    let sequenceFilename;
+    if (pieceId) {
+      sequenceFilename = `${pieceId}.json`;
+    } else {
+      // Fallback if no pieceId (e.g., sendToApi was false, or pieceId generation failed)
+      // This case might indicate an issue if a sequence is expected for production tracking.
+      // For robustness, we ensure a unique filename.
+      sequenceFilename = `${path.parse(originalFilename).name}_no-id_${Date.now()}.json`;
+    }
     const sequenceFilePath = path.join(sequencesDir, sequenceFilename);
     
     try {
       // Écrire le fichier de séquence
       fs.writeFileSync(sequenceFilePath, JSON.stringify(actions, null, 2));
       console.log(`Séquence d'actions sauvegardée dans : ${sequenceFilePath}`);
+
+      // Store in memory cache if pieceId is available
+      if (pieceId && actions) {
+        productionJobService.storeJobSequence(pieceId, actions);
+      }
       
       // Revenir au format JSON original pour la compatibilité avec le frontend
       const response = {

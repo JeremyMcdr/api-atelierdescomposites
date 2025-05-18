@@ -21,6 +21,7 @@ const emergencyRoutes = require("./routes/emergencyRoutes");
 const testRoutes = require("./routes/testRoutes");
 const statusRoutes = require("./routes/statusRoutes");
 const svgLibraryRoutes = require("./routes/svgLibraryRoutes");
+const productionJobRoutes = require("./routes/productionJobRoutes");
 
 // Middleware
 const configMiddleware = require('./middlewares/configMiddleware');
@@ -84,6 +85,7 @@ app.use("/api/emergency", emergencyRoutes);
 app.use("/api/test", testRoutes);
 app.use("/api/status", statusRoutes);
 app.use("/api/library", svgLibraryRoutes);
+app.use("/api/production-jobs", productionJobRoutes);
 
 // Route de test
 app.get("/", (req, res) => {
@@ -114,19 +116,28 @@ app.get('/api/healthcheck', (req, res) => {
 });
 
 // Route pour l'arrêt d'urgence
-app.post('/api/emergency-stop', (req, res) => {
-  const stopResult = emergencyStopService.triggerEmergencyStop();
-  if (stopResult.success) {
-    res.status(200).json({
-      success: true,
-      message: 'Arrêt d\'urgence déclenché avec succès',
-      details: stopResult
-    });
-  } else {
+app.post('/api/emergency-stop', async (req, res) => {
+  try {
+    const stopResult = await emergencyStopService.triggerEmergencyStop();
+    if (stopResult.success) {
+      res.status(200).json({
+        success: true,
+        message: stopResult.message || 'Arrêt d\'urgence déclenché avec succès',
+        details: stopResult
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: stopResult.message || 'Échec du déclenchement de l\'arrêt d\'urgence',
+        error: stopResult.error ? stopResult.error.message || stopResult.error : 'Erreur inconnue du service d\'arrêt'
+      });
+    }
+  } catch (serviceError) {
+    console.error("Erreur inattendue dans le service d'arrêt d'urgence:", serviceError);
     res.status(500).json({
       success: false,
-      message: 'Échec du déclenchement de l\'arrêt d\'urgence',
-      error: stopResult.error
+      message: "Erreur serveur interne lors de la tentative d'arrêt d'urgence.",
+      error: serviceError.message
     });
   }
 });
